@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Resume Chatbot</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Chat with Tomer</h1>
+            <p class="subtitle">Ask me anything about my professional background</p>
+        </header>
+
+        <!-- Chat Section (Always Visible) -->
+        <div id="chat-section" class="chat-section">
+            <div class="chat-status">
+                <span class="status-indicator"></span>
+                <span>Ready to chat!</span>
+            </div>
+
+            <div id="chat-messages" class="chat-messages">
+                <div class="message bot-message">
+                    <div class="message-content">
+                        Hi! I'm Tomer's AI assistant. Ask me anything about my professional background, skills, experience, or projects!
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-container">
+                <input type="text" id="user-input" class="chat-input" placeholder="Ask me about my experience, skills, projects..." autofocus>
+                <button id="send-btn" class="btn btn-send">Send</button>
+            </div>
+        </div>
+
+        <!-- Loading Spinner -->
+        <div id="loading" class="loading" style="display: none;">
+            <div class="spinner"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
