@@ -254,16 +254,16 @@ def chat():
 
     try:
         # Use RAG to find relevant context
-        relevant_context = search_relevant_context(user_message, n_results=2)
+        relevant_context = search_relevant_context(user_message, n_results=4)
 
         # Create system prompt with relevant context
         system_prompt = f"""You are Tomer Sadeh's AI assistant. Answer questions about him naturally and conversationally.
 
 KEY RULES:
-1. Keep responses SHORT and CONCISE (2-4 sentences max)
-2. Speak naturally - like you're having a conversation, not reading a resume
-3. Only mention the most relevant points - don't list everything
-4. If asked about something specific, give a brief, focused answer
+1. For general questions: Keep responses SHORT (2-4 sentences)
+2. For specific project questions: Provide more detail (4-6 sentences covering key components)
+3. Speak naturally - like you're having a conversation, not reading a resume
+4. When asked about a PROJECT, mention: what it does, key technologies, and impact
 5. Don't repeat information unless asked
 
 RELEVANT INFO:
@@ -286,7 +286,7 @@ Now answer briefly and naturally:"""
             ],
             model="llama-3.3-70b-versatile",
             temperature=0.7,
-            max_tokens=200  # Reduced from 1024 to keep responses shorter
+            max_tokens=350  # Increased to handle complex project questions
         )
 
         response = chat_completion.choices[0].message.content

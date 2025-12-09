@@ -3,40 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Personal Resume Chatbot</title>
+    <title>Chat with Tomer - AI Resume Assistant</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <!-- Add Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Chat with Tomer</h1>
-            <p class="subtitle">Ask me anything about my professional background</p>
-        </header>
-
-        <!-- Chat Section (Always Visible) -->
-        <div id="chat-section" class="chat-section">
+            <div class="header-content">
+                <div class="avatar-large">
+                    <i class="fas fa-user-tie"></i>
+                </div>
+                <div class="header-text">
+                    <h1>Chat with Tomer</h1>
+                    <p class="subtitle">Software Developer & Solution Engineer</p>
+                </div>
+            </div>
             <div class="chat-status">
                 <span class="status-indicator"></span>
-                <span>Ready to chat!</span>
+                <span>Online - Ready to answer your questions</span>
             </div>
+        </header>
 
+        <!-- Chat Section -->
+        <div id="chat-section" class="chat-section">
             <div id="chat-messages" class="chat-messages">
                 <div class="message bot-message">
-                    <div class="message-content">
-                        Hi! I'm Tomer's AI assistant. Ask me anything about my professional background, skills, experience, or projects!
+                    <div class="message-avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="message-wrapper">
+                        <div class="message-content">
+                            Hi! I'm Tomer's AI assistant. Ask me anything about his professional background, skills, experience, or projects!
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Suggested Questions -->
+                <div id="suggested-questions" class="suggested-questions">
+                    <p class="suggestions-label">Try asking:</p>
+                    <div class="suggestion-chips">
+                        <button class="suggestion-chip" data-question="What's Tomer's experience?">
+                            <i class="fas fa-briefcase"></i> Experience
+                        </button>
+                        <button class="suggestion-chip" data-question="Tell me about the Risk automation project">
+                            <i class="fas fa-project-diagram"></i> Projects
+                        </button>
+                        <button class="suggestion-chip" data-question="What technologies does Tomer know?">
+                            <i class="fas fa-code"></i> Tech Stack
+                        </button>
+                        <button class="suggestion-chip" data-question="What are Tomer's key achievements?">
+                            <i class="fas fa-trophy"></i> Achievements
+                        </button>
                     </div>
                 </div>
             </div>
 
             <div class="chat-input-container">
-                <input type="text" id="user-input" class="chat-input" placeholder="Ask me about my experience, skills, projects..." autofocus>
-                <button id="send-btn" class="btn btn-send">Send</button>
+                <input type="text" id="user-input" class="chat-input" placeholder="Ask me anything..." autofocus>
+                <button id="send-btn" class="btn btn-send">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
             </div>
-        </div>
-
-        <!-- Loading Spinner -->
-        <div id="loading" class="loading" style="display: none;">
-            <div class="spinner"></div>
         </div>
     </div>
 
