@@ -37,7 +37,8 @@ GITHUB_USERNAME = os.getenv('GITHUB_USERNAME', 'tomersadeh123')
 
 # Initialize RAG components
 print("🔄 Initializing RAG system...")
-embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+# Use smaller model for lower memory usage (20MB vs 90MB)
+embedding_model = SentenceTransformer('paraphrase-MiniLM-L3-v2')
 chroma_client = chromadb.Client()
 
 # Create or get collection
@@ -332,4 +333,6 @@ def sync_github():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    # Use PORT environment variable for deployment (Render, Heroku, etc.)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
