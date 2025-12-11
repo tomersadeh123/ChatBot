@@ -35,25 +35,15 @@ else:
 # GitHub configuration
 GITHUB_USERNAME = os.getenv('GITHUB_USERNAME', 'tomersadeh123')
 
-# Initialize RAG components
-print("🔄 Initializing RAG system...")
-# Use smaller model for lower memory usage (20MB vs 90MB)
-embedding_model = SentenceTransformer('paraphrase-MiniLM-L3-v2')
-chroma_client = chromadb.Client()
-
-# Create or get collection
-try:
-    collection = chroma_client.get_or_create_collection(
-        name="resume_collection",
-        metadata={"description": "Tomer's resume information"}
-    )
-except Exception as e:
-    print(f"⚠ Error creating collection: {e}")
-    collection = None
+# Initialize RAG components (lazy loading)
+embedding_model = None
+chroma_client = None
+collection = None
 
 # Store resume content
 resume_content = ""
 resume_loaded = False
+rag_initialized = False
 
 
 def chunk_text(text, chunk_size=500, overlap=50):
@@ -145,16 +135,44 @@ def search_relevant_context(query, n_results=3):
         return resume_content  # Fallback
 
 
-# Load resume and create embeddings on startup
-load_resume_and_create_embeddings()
+def initialize_rag_system():
+    """Initialize RAG system on first request (lazy loading)"""
+    global embedding_model, chroma_client, collection, rag_initialized
 
-# Sync GitHub repos on startup
-if GITHUB_USERNAME and collection:
+    if rag_initialized:
+        return
+
+    print("🔄 Initializing RAG system...")
+
     try:
-        sync_github_repos(GITHUB_USERNAME, collection, chunk_text)
+        # Use smaller model for lower memory usage (20MB vs 90MB)
+        embedding_model = SentenceTransformer('paraphrase-MiniLM-L3-v2')
+        chroma_client = chromadb.Client()
+
+        # Create or get collection
+        collection = chroma_client.get_or_create_collection(
+            name="resume_collection",
+            metadata={"description": "Tomer's resume information"}
+        )
+
+        # Load resume and create embeddings
+        load_resume_and_create_embeddings()
+
+        # Sync GitHub repos
+        if GITHUB_USERNAME and collection:
+            try:
+                sync_github_repos(GITHUB_USERNAME, collection, chunk_text)
+            except Exception as e:
+                print(f"⚠ GitHub sync failed: {e}")
+                print("  Continuing without GitHub data...")
+
+        rag_initialized = True
+        print("✓ RAG system initialized successfully")
+
     except Exception as e:
-        print(f"⚠ GitHub sync failed: {e}")
-        print("  Continuing without GitHub data...")
+        print(f"⚠ Error initializing RAG system: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def allowed_file(filename):
@@ -186,9 +204,21 @@ def extract_text_from_txt(file_path):
         return file.read()
 
 
+@app.route('/health')
+def health():
+    """Health check endpoint for deployment platforms"""
+    return jsonify({'status': 'ok', 'rag_initialized': rag_initialized}), 200
+
+
 @app.route('/')
 def index():
     """Serve the main page"""
+    # Initialize RAG system on first real request
+    if not rag_initialized:
+        try:
+            initialize_rag_system()
+        except Exception as e:
+            print(f"⚠ Failed to initialize RAG system: {e}")
     return render_template('index.html')
 
 
@@ -241,11 +271,15 @@ def upload_resume():
 @app.route('/api/chat', methods=['POST'])
 def chat():
     """Handle chat messages with RAG"""
+    # Initialize RAG system if not already done
+    if not rag_initialized:
+        initialize_rag_system()
+
     if not groq_client:
         return jsonify({'error': 'Groq API key not configured'}), 500
 
     if not resume_loaded:
-        return jsonify({'error': 'Resume not loaded yet'}), 400
+        return jsonify({'error': 'Resume not loaded yet. Please wait for initialization.'}), 400
 
     data = request.json
     user_message = data.get('message', '')
@@ -313,6 +347,10 @@ def resume_status():
 @app.route('/api/sync-github', methods=['POST'])
 def sync_github():
     """Manually trigger GitHub sync"""
+    # Initialize RAG system if not already done
+    if not rag_initialized:
+        initialize_rag_system()
+
     if not GITHUB_USERNAME:
         return jsonify({'error': 'GitHub username not configured'}), 400
 
