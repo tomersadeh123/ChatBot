@@ -1,187 +1,65 @@
+"""
+Flask application for Tomer's AI Chatbot.
+
+Enterprise-ready with modular architecture, key rotation, and MongoDB logging.
+"""
 import os
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
-from groq import Groq
 from dotenv import load_dotenv
 import pdfplumber
 from docx import Document
 from werkzeug.utils import secure_filename
-import chromadb
-from sentence_transformers import SentenceTransformer
-from github_sync import sync_github_repos
+
+# Import our enterprise modules
+from config import Config
+from chatbot import get_chatbot
+from rag_system import get_rag_system
 
 # Load environment variables
 load_dotenv()
 
+# Initialize Flask app
 app = Flask(__name__)
 CORS(app)
 
-# Configuration
-UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'pdf', 'docx', 'txt'}
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Apply configuration
+app.config.from_object(Config)
+os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)
 
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+# Validate configuration
+try:
+    Config.validate()
+    Config.print_config()
+except Exception as e:
+    print(f"⚠ Configuration error: {e}")
+    print("  Continuing anyway...")
 
-# Initialize Groq client
-groq_api_key = os.getenv('GROQ_API_KEY')
-if not groq_api_key:
-    print("WARNING: GROQ_API_KEY not found in environment variables!")
-    groq_client = None
-else:
-    groq_client = Groq(api_key=groq_api_key)
-
-# GitHub configuration
-GITHUB_USERNAME = os.getenv('GITHUB_USERNAME', 'tomersadeh123')
-
-# Initialize RAG components (lazy loading)
-embedding_model = None
-chroma_client = None
-collection = None
-
-# Store resume content
-resume_content = ""
-resume_loaded = False
-rag_initialized = False
+# Initialize enterprise components (singletons)
+chatbot = None
+rag_system = None
 
 
-def chunk_text(text, chunk_size=500, overlap=50):
-    """Split text into overlapping chunks"""
-    words = text.split()
-    chunks = []
+def ensure_initialized():
+    """Ensure chatbot and RAG system are initialized (lazy loading)."""
+    global chatbot, rag_system
 
-    for i in range(0, len(words), chunk_size - overlap):
-        chunk = ' '.join(words[i:i + chunk_size])
-        if chunk:
-            chunks.append(chunk)
-
-    return chunks
-
-
-def load_resume_and_create_embeddings():
-    """Load resume and create vector embeddings"""
-    global resume_content, resume_loaded, collection
-
-    resume_file = 'resume_data.txt'
-    if not os.path.exists(resume_file):
-        print(f"⚠ {resume_file} not found")
-        return
-
-    try:
-        with open(resume_file, 'r', encoding='utf-8') as f:
-            content = f.read().strip()
-
-        if not content or content.startswith('# Your Professional Information'):
-            print(f"⚠ Please add your information to {resume_file}")
-            return
-
-        resume_content = content
-        print(f"✓ Resume loaded successfully from {resume_file}")
-
-        # Create chunks
-        chunks = chunk_text(resume_content)
-        print(f"✓ Created {len(chunks)} text chunks")
-
-        # Clear existing collection data
-        if collection:
-            try:
-                collection.delete(where={})
-            except:
-                pass
-
-            # Create embeddings and add to collection
-            print("🔄 Creating embeddings...")
-
-            ids = [f"chunk_{i}" for i in range(len(chunks))]
-
-            # Add documents to collection
-            collection.add(
-                documents=chunks,
-                ids=ids
-            )
-
-            print(f"✓ RAG system ready with {len(chunks)} chunks")
-            resume_loaded = True
-        else:
-            print("⚠ Collection not available")
-
-    except Exception as e:
-        print(f"⚠ Error loading resume: {e}")
-        import traceback
-        traceback.print_exc()
-
-
-def search_relevant_context(query, n_results=3):
-    """Search for relevant context using RAG"""
-    if not collection or not resume_loaded:
-        return resume_content  # Fallback to full resume
-
-    try:
-        results = collection.query(
-            query_texts=[query],
-            n_results=min(n_results, collection.count())
-        )
-
-        if results and results['documents']:
-            # Combine top results
-            relevant_chunks = results['documents'][0]
-            return "\n\n".join(relevant_chunks)
-        else:
-            return resume_content
-
-    except Exception as e:
-        print(f"⚠ Search error: {e}")
-        return resume_content  # Fallback
-
-
-def initialize_rag_system():
-    """Initialize RAG system on first request (lazy loading)"""
-    global embedding_model, chroma_client, collection, rag_initialized
-
-    if rag_initialized:
-        return
-
-    print("🔄 Initializing RAG system...")
-
-    try:
-        # Use smaller model for lower memory usage (20MB vs 90MB)
-        embedding_model = SentenceTransformer('paraphrase-MiniLM-L3-v2')
-        chroma_client = chromadb.Client()
-
-        # Create or get collection
-        collection = chroma_client.get_or_create_collection(
-            name="resume_collection",
-            metadata={"description": "Tomer's resume information"}
-        )
-
-        # Load resume and create embeddings
-        load_resume_and_create_embeddings()
-
-        # Sync GitHub repos
-        if GITHUB_USERNAME and collection:
-            try:
-                sync_github_repos(GITHUB_USERNAME, collection, chunk_text)
-            except Exception as e:
-                print(f"⚠ GitHub sync failed: {e}")
-                print("  Continuing without GitHub data...")
-
-        rag_initialized = True
-        print("✓ RAG system initialized successfully")
-
-    except Exception as e:
-        print(f"⚠ Error initializing RAG system: {e}")
-        import traceback
-        traceback.print_exc()
+    if chatbot is None:
+        print("🚀 [APP] Initializing enterprise components...")
+        chatbot = get_chatbot()
+        rag_system = get_rag_system()
+        # Initialize RAG on first call
+        chatbot.ensure_initialized()
+        print("✓ [APP] Enterprise components ready")
 
 
 def allowed_file(filename):
-    """Check if file extension is allowed"""
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    """Check if file extension is allowed."""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in Config.ALLOWED_EXTENSIONS
 
 
 def extract_text_from_pdf(file_path):
-    """Extract text from PDF file"""
+    """Extract text from PDF file."""
     text = ""
     with pdfplumber.open(file_path) as pdf:
         for page in pdf.pages:
@@ -190,7 +68,7 @@ def extract_text_from_pdf(file_path):
 
 
 def extract_text_from_docx(file_path):
-    """Extract text from DOCX file"""
+    """Extract text from DOCX file."""
     doc = Document(file_path)
     text = ""
     for paragraph in doc.paragraphs:
@@ -199,34 +77,68 @@ def extract_text_from_docx(file_path):
 
 
 def extract_text_from_txt(file_path):
-    """Extract text from TXT file"""
+    """Extract text from TXT file."""
     with open(file_path, 'r', encoding='utf-8') as file:
         return file.read()
 
 
+# =============================================================================
+# ROUTES
+# =============================================================================
+
 @app.route('/health')
 def health():
-    """Health check endpoint for deployment platforms"""
-    return jsonify({'status': 'ok', 'rag_initialized': rag_initialized}), 200
+    """Health check endpoint for deployment platforms."""
+    is_initialized = rag_system.initialized if rag_system else False
+    return jsonify({
+        'status': 'ok',
+        'rag_initialized': is_initialized,
+        'version': '2.0.0-enterprise'
+    }), 200
 
 
 @app.route('/')
 def index():
-    """Serve the main page"""
-    # Initialize RAG system on first real request
-    if not rag_initialized:
-        try:
-            initialize_rag_system()
-        except Exception as e:
-            print(f"⚠ Failed to initialize RAG system: {e}")
+    """Serve the main page."""
+    # Initialize on first request (lazy loading)
+    try:
+        ensure_initialized()
+    except Exception as e:
+        print(f"⚠ [APP] Initialization error: {e}")
     return render_template('index.html')
+
+
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    """Handle chat messages with RAG."""
+    # Ensure initialized
+    ensure_initialized()
+
+    # Get message from request
+    data = request.json
+    user_message = data.get('message', '')
+    session_id = data.get('session_id')
+
+    if not user_message:
+        return jsonify({'error': 'No message provided'}), 400
+
+    # Delegate to chatbot module
+    result = chatbot.chat(user_message, session_id=session_id)
+
+    if result.get('status') == 'error':
+        return jsonify({'error': result.get('error')}), 500
+    elif result.get('status') == 'not_ready':
+        return jsonify({'error': result.get('error')}), 400
+
+    return jsonify({
+        'response': result.get('response'),
+        'session_id': result.get('session_id')
+    }), 200
 
 
 @app.route('/api/upload-resume', methods=['POST'])
 def upload_resume():
-    """Handle resume file upload"""
-    global resume_content
-
+    """Handle resume file upload."""
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
 
@@ -240,137 +152,86 @@ def upload_resume():
 
     try:
         filename = secure_filename(file.filename)
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file_path = os.path.join(Config.UPLOAD_FOLDER, filename)
         file.save(file_path)
 
         # Extract text based on file type
         file_ext = filename.rsplit('.', 1)[1].lower()
 
         if file_ext == 'pdf':
-            resume_content = extract_text_from_pdf(file_path)
+            resume_text = extract_text_from_pdf(file_path)
         elif file_ext == 'docx':
-            resume_content = extract_text_from_docx(file_path)
+            resume_text = extract_text_from_docx(file_path)
         elif file_ext == 'txt':
-            resume_content = extract_text_from_txt(file_path)
+            resume_text = extract_text_from_txt(file_path)
+        else:
+            return jsonify({'error': 'Unsupported file type'}), 400
 
         # Clean up the uploaded file
         os.remove(file_path)
 
-        if not resume_content.strip():
+        if not resume_text.strip():
             return jsonify({'error': 'Could not extract text from file'}), 400
 
+        # TODO: Add this resume text to RAG system
+        # For now, just return success
         return jsonify({
             'message': 'Resume uploaded successfully',
-            'preview': resume_content[:200] + '...' if len(resume_content) > 200 else resume_content
+            'preview': resume_text[:200] + '...' if len(resume_text) > 200 else resume_text
         }), 200
 
     except Exception as e:
+        print(f"⚠ [APP] Error processing file: {e}")
         return jsonify({'error': f'Error processing file: {str(e)}'}), 500
-
-
-@app.route('/api/chat', methods=['POST'])
-def chat():
-    """Handle chat messages with RAG"""
-    # Initialize RAG system if not already done
-    if not rag_initialized:
-        initialize_rag_system()
-
-    if not groq_client:
-        return jsonify({'error': 'Groq API key not configured'}), 500
-
-    if not resume_loaded:
-        return jsonify({'error': 'Resume not loaded yet. Please wait for initialization.'}), 400
-
-    data = request.json
-    user_message = data.get('message', '')
-
-    if not user_message:
-        return jsonify({'error': 'No message provided'}), 400
-
-    try:
-        # Use RAG to find relevant context
-        relevant_context = search_relevant_context(user_message, n_results=4)
-
-        # Create system prompt with relevant context
-        system_prompt = f"""You are Tomer Sadeh's AI assistant. Answer questions about him naturally and conversationally.
-
-KEY RULES:
-1. For general questions: Keep responses SHORT (2-4 sentences)
-2. For specific project questions: Provide more detail (4-6 sentences covering key components)
-3. Speak naturally - like you're having a conversation, not reading a resume
-4. When asked about a PROJECT, mention: what it does, key technologies, and impact
-5. Don't repeat information unless asked
-
-RELEVANT INFO:
-{relevant_context}
-
-Example good responses:
-Q: "What's Tomer's experience?"
-A: "Tomer is a Software Developer at Fibonatix working with .NET, React, and BigQuery. He focuses on building scalable systems and has automated workflows that reduced manual effort by 40%."
-
-Q: "Does he know React?"
-A: "Yes! Tomer builds responsive frontend applications with React, using hooks and context API. He's worked on full-stack projects combining React with .NET backends."
-
-Now answer briefly and naturally:"""
-
-        # Call Groq API
-        chat_completion = groq_client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
-            ],
-            model="llama-3.3-70b-versatile",
-            temperature=0.7,
-            max_tokens=350  # Increased to handle complex project questions
-        )
-
-        response = chat_completion.choices[0].message.content
-
-        return jsonify({'response': response}), 200
-
-    except Exception as e:
-        print(f"Error in chat: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': f'Error generating response: {str(e)}'}), 500
 
 
 @app.route('/api/resume-status', methods=['GET'])
 def resume_status():
-    """Check if resume is uploaded"""
+    """Check if resume is loaded."""
+    ensure_initialized()
+
+    is_loaded = rag_system.resume_loaded if rag_system else False
+    preview = rag_system.resume_content if rag_system and is_loaded else None
+
     return jsonify({
-        'uploaded': resume_loaded,
-        'preview': resume_content[:200] + '...' if len(resume_content) > 200 else resume_content if resume_content else None
+        'uploaded': is_loaded,
+        'preview': preview[:200] + '...' if preview and len(preview) > 200 else preview
     }), 200
 
 
 @app.route('/api/sync-github', methods=['POST'])
 def sync_github():
-    """Manually trigger GitHub sync"""
-    # Initialize RAG system if not already done
-    if not rag_initialized:
-        initialize_rag_system()
+    """Manually trigger GitHub sync."""
+    ensure_initialized()
 
-    if not GITHUB_USERNAME:
+    if not Config.GITHUB_USERNAME:
         return jsonify({'error': 'GitHub username not configured'}), 400
 
-    if not collection:
+    if not rag_system or not rag_system.collection:
         return jsonify({'error': 'Vector database not available'}), 500
 
     try:
-        synced_count = sync_github_repos(GITHUB_USERNAME, collection, chunk_text)
+        rag_system.sync_github()
         return jsonify({
-            'message': f'Successfully synced {synced_count} repositories',
-            'total_items': collection.count()
+            'message': f'Successfully synced GitHub repositories',
+            'total_items': rag_system.collection.count()
         }), 200
 
     except Exception as e:
+        print(f"⚠ [APP] GitHub sync error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Sync failed: {str(e)}'}), 500
 
 
+@app.route('/api/stats', methods=['GET'])
+def stats():
+    """Get chatbot statistics."""
+    ensure_initialized()
+
+    return jsonify(chatbot.get_stats()), 200
+
+
 if __name__ == '__main__':
     # Use PORT environment variable for deployment (Render, Heroku, etc.)
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=Config.PORT, debug=Config.DEBUG)
