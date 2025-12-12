@@ -36,10 +36,12 @@ class RAGSystem:
 
         try:
             # Initialize embedding model
+            print("🔄 [RAG] Loading embedding model...")
             self.embedding_model = SentenceTransformer(Config.RAG_EMBEDDING_MODEL)
             print(f"✓ [RAG] Loaded embedding model: {Config.RAG_EMBEDDING_MODEL}")
 
             # Initialize ChromaDB
+            print("🔄 [RAG] Initializing ChromaDB...")
             self.chroma_client = chromadb.Client()
             self.collection = self.chroma_client.get_or_create_collection(
                 name="resume_collection",
@@ -48,10 +50,28 @@ class RAGSystem:
             print("✓ [RAG] ChromaDB collection ready")
 
             # Load resume
+            print("🔄 [RAG] Loading resume...")
             self.load_resume()
 
-            # Sync GitHub repos
-            self.sync_github()
+            # Sync GitHub repos (skip if it takes too long)
+            print("🔄 [RAG] Syncing GitHub repos...")
+            try:
+                import signal
+
+                def timeout_handler(signum, frame):
+                    raise TimeoutError("GitHub sync timeout")
+
+                # Set 10 second timeout for GitHub sync
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(10)
+
+                try:
+                    self.sync_github()
+                finally:
+                    signal.alarm(0)  # Cancel alarm
+
+            except (TimeoutError, Exception) as e:
+                print(f"⚠ [RAG] GitHub sync skipped: {e}")
 
             self.initialized = True
             print("✓ [RAG] System initialized successfully")
@@ -60,6 +80,9 @@ class RAGSystem:
             print(f"⚠ [RAG] Initialization error: {e}")
             import traceback
             traceback.print_exc()
+            # Mark as initialized anyway to prevent infinite retry loops
+            self.initialized = True
+            self.resume_loaded = True  # Allow chat even with partial init
 
     def chunk_text(self, text: str, chunk_size: Optional[int] = None, overlap: Optional[int] = None) -> List[str]:
         """Split text into overlapping chunks.
