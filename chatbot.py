@@ -19,7 +19,14 @@ class Chatbot:
     def __init__(self):
         """Initialize chatbot components."""
         self.rag_system = get_rag_system()
-        self.keybank = get_keybank()
+
+        try:
+            self.keybank = get_keybank()
+            print(f"✓ [CHATBOT] KeyBank initialized with {self.keybank.key_count()} key(s)")
+        except Exception as e:
+            print(f"⚠ [CHATBOT] KeyBank initialization failed: {e}")
+            raise
+
         self.mongo_logger = get_mongo_logger()
 
         print("✓ [CHATBOT] Initialized with KeyBank and MongoDB logging")

@@ -111,29 +111,39 @@ def index():
 @app.route('/api/chat', methods=['POST'])
 def chat():
     """Handle chat messages with RAG."""
-    # Ensure initialized
-    ensure_initialized()
+    try:
+        # Ensure initialized
+        ensure_initialized()
 
-    # Get message from request
-    data = request.json
-    user_message = data.get('message', '')
-    session_id = data.get('session_id')
+        # Get message from request
+        data = request.json
+        if not data:
+            return jsonify({'error': 'Invalid request: no JSON data'}), 400
 
-    if not user_message:
-        return jsonify({'error': 'No message provided'}), 400
+        user_message = data.get('message', '')
+        session_id = data.get('session_id')
 
-    # Delegate to chatbot module
-    result = chatbot.chat(user_message, session_id=session_id)
+        if not user_message:
+            return jsonify({'error': 'No message provided'}), 400
 
-    if result.get('status') == 'error':
-        return jsonify({'error': result.get('error')}), 500
-    elif result.get('status') == 'not_ready':
-        return jsonify({'error': result.get('error')}), 400
+        # Delegate to chatbot module
+        result = chatbot.chat(user_message, session_id=session_id)
 
-    return jsonify({
-        'response': result.get('response'),
-        'session_id': result.get('session_id')
-    }), 200
+        if result.get('status') == 'error':
+            return jsonify({'error': result.get('error')}), 500
+        elif result.get('status') == 'not_ready':
+            return jsonify({'error': result.get('error')}), 400
+
+        return jsonify({
+            'response': result.get('response'),
+            'session_id': result.get('session_id')
+        }), 200
+
+    except Exception as e:
+        print(f"⚠ [APP] Chat endpoint error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 
 @app.route('/api/upload-resume', methods=['POST'])
